@@ -60,9 +60,14 @@ class Viewer:
         self.pause_recording = False  # Flag to pause/resume recording
         self.video_folder = ""
 
+        # in case of robosuite viewer, we open only one window.
+        # Later use the numpad to activate additional cameras
+        self.is_robosuite = self.renderer.rendering_settings.is_robosuite
+
         cv2.namedWindow('ExternalView')
         cv2.moveWindow("ExternalView", 0, 0)
-        cv2.namedWindow('RobotView')
+        if not self.is_robosuite:
+            cv2.namedWindow('RobotView')
         cv2.setMouseCallback('ExternalView', self.mouse_callback)
         self.create_visual_object()
         self.planner = None
@@ -84,13 +89,16 @@ class Viewer:
             radius=0.04, rgba_color=[0, 0, 1, 1])
         self.constraint_marker2 = VisualMarker(visual_shape=p.GEOM_CAPSULE, radius=0.01, length=3,
                                                initial_offset=[0, 0, -1.5], rgba_color=[0, 0, 1, 1])
-        if self.simulator is not None:
-            self.simulator.import_object(
-                self.constraint_marker2, use_pbr=False)
-            self.simulator.import_object(self.constraint_marker, use_pbr=False)
 
-        self.constraint_marker.set_position([0, 0, -1])
-        self.constraint_marker2.set_position([0, 0, -1])
+        # Simuation is done by MuJoCo when rendering robosuite envs  
+        if not self.is_robosuite:                            
+            if self.simulator is not None:
+                self.simulator.import_object(
+                    self.constraint_marker2, use_pbr=False)
+                self.simulator.import_object(self.constraint_marker, use_pbr=False)
+
+            self.constraint_marker.set_position([0, 0, -1])
+            self.constraint_marker2.set_position([0, 0, -1])
 
     def apply_push_force(self, x, y, force):
         """
@@ -628,17 +636,34 @@ class Viewer:
             self.right_down = False
             self.manipulation_mode = (self.manipulation_mode + 1) % 3
 
+        elif self.is_robosuite and \
+             q == ord('0') or q == ord('1') or q == ord('2') or q == ord('3') or q == ord('4') or q == ord('5'):
+            idxx = int(chr(q)) 
+            self.renderer._switch_camera(idxx)
+            if not self.renderer._is_camera_active(idxx):
+                cv2.destroyWindow(self.renderer._get_camera_name(idxx))        
+
         if self.recording and not self.pause_recording:
             cv2.imwrite(os.path.join(self.video_folder, '{:05d}.png'.format(self.frame_idx)),
                         (frame * 255).astype(np.uint8))
             self.frame_idx += 1
 
         if self.renderer is not None:
-            frames = self.renderer.render_robot_cameras(modes=('rgb'))
-            if len(frames) > 0:
-                frame = cv2.cvtColor(np.concatenate(
-                    frames, axis=1), cv2.COLOR_RGB2BGR)
-                cv2.imshow('RobotView', frame)
+            if self.is_robosuite:
+                frames = self.renderer.render_robosuite_cameras(modes=('rgb'))
+                names = self.renderer._get_names_active_cameras()
+                assert len(frames) == len(names)
+                if len(frames) > 0:
+                    for (rgb, cam_name) in zip(frames, names):
+                        frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                        cv2.imshow(cam_name, frame) 
+            else:
+                frames = self.renderer.render_robot_cameras(modes=('rgb'))
+                if len(frames) > 0:
+                    frame = cv2.cvtColor(np.concatenate(
+                        frames, axis=1), cv2.COLOR_RGB2BGR)
+                    cv2.imshow('RobotView', frame)                
+
 
 
 if __name__ == '__main__':

@@ -39,6 +39,8 @@ class BaseRobot(object):
         self.physics_model_dir = os.path.join(gibson2.assets_path, "models")
         self.scale = scale
         self.eyes = None
+        # the following variable is only used while rendering robosuite envs.
+        self.cameras = []
         logging.info('Loading robot model file: {}'.format(self.model_file))
         if self.model_file[-4:] == 'urdf':
             self.model_type = 'URDF'

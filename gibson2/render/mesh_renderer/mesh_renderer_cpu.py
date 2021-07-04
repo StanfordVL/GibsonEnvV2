@@ -238,7 +238,9 @@ class MeshRenderer(object):
         """
         self.lightpos = position
         self.lightV = lookat(self.lightpos, target, [0, 1, 0])
-        self.lightP = ortho(-5, 5, -5, 5, -10, 20.0)
+        # If lightP is already set by an outside entity it will not override it.
+        if not hasattr(self, 'lightP'):
+            self.lightP = ortho(-5, 5, -5, 5, -10, 20.0)
 
     def setup_framebuffer(self):
         """
@@ -247,7 +249,6 @@ class MeshRenderer(object):
         [self.fbo, self.color_tex_rgb, self.color_tex_normal, self.color_tex_semantics, self.color_tex_3d,
          self.color_tex_scene_flow, self.color_tex_optical_flow,
          self.depth_tex] = self.r.setup_framebuffer_meshrenderer(self.width, self.height)
-
         if self.msaa:
             [self.fbo_ms, self.color_tex_rgb_ms, self.color_tex_normal_ms, self.color_tex_semantics_ms,
              self.color_tex_3d_ms, self.color_tex_scene_flow_ms, self.color_tex_optical_flow_ms,
@@ -366,6 +367,12 @@ class MeshRenderer(object):
             logging.warning(
                 "passed in one material ends up overwriting multiple materials")
 
+        # set the default values of variable before being modified later.
+        num_existing_mats = len(self.materials_mapping)    # Number of current Material elements 
+        texuniform = False
+        num_added_materials = 0        
+
+        # Deparse the materials in the obj file by loading textures into the renderer's memory and creating a Material element for them
         for i, item in enumerate(materials):
             if overwrite_material is not None:
                 self.load_randomized_material(overwrite_material)
@@ -386,15 +393,24 @@ class MeshRenderer(object):
                                     roughness_texture_id=texture_roughness,
                                     normal_texture_id=texture_normal)
             else:
-                material = Material('color', kd=item.diffuse)
+                if input_kd is not None and len(input_kd) == 4 and input_kd[3] != 1:
+                    # Pink color for translucent objects.
+                    material = Material('color', kd=[1,0,1,1])
+                else:
+                    material = Material('color', kd=item.diffuse)
             self.materials_mapping[i + material_count] = material
+            num_added_materials = len(materials)
 
+        # Case when mesh obj is without mtl file but overwrite material is specified.
+        if len(materials) == 0 and overwrite_material is not None:
+            texuniform = overwrite_material.texuniform
+            self.materials_mapping[num_existing_mats] = overwrite_material
+            num_added_materials = 1
+        
         if input_kd is not None:  # append the default material in the end, in case material loading fails
-            self.materials_mapping[len(
-                materials) + material_count] = Material('color', kd=input_kd, texture_id=-1)
+            self.materials_mapping[num_existing_mats + num_added_materials] = Material('color', kd=input_kd)
         else:
-            self.materials_mapping[len(
-                materials) + material_count] = Material('color', kd=[0.5, 0.5, 0.5], texture_id=-1)
+            self.materials_mapping[num_existing_mats + num_added_materials] = Material('color', kd=[0.5, 0.5, 0.5])
 
         VAO_ids = []
 
@@ -405,10 +421,23 @@ class MeshRenderer(object):
         vertex_texcoord = np.array(attrib.texcoords).reshape(
             (len(attrib.texcoords) // 2, 2))
 
+        if texuniform and overwrite_material.texture_type == "2d":
+            # if any material is used multiple times transform param gets overridden.
+            # Therefore original value of transform param is stored during initialization
+            # from robosuite ans is stored in `_orig_transform_param`
+            repeat_x = overwrite_material._orig_transform_param[0] * (np.max(vertex_texcoord[:,0]) - np.min(vertex_texcoord[:,0])) * scale[0]
+            repeat_y = overwrite_material._orig_transform_param[1] * (np.max(vertex_texcoord[:,1]) - np.min(vertex_texcoord[:,1])) * scale[1]
+            overwrite_material.transform_param = [repeat_x, repeat_y, 0.] 
+
         for shape in shapes:
             logging.debug("Shape name: {}".format(shape.name))
-            # assume one shape only has one material
-            material_id = shape.mesh.material_ids[0]
+            if overwrite_material is None:
+                # assume one shape only has one material
+                material_id = shape.mesh.material_ids[0]
+            else:
+                # This will makes us use the input_material at self.materials_mapping[num_existing_mats + material_id=0]
+                material_id = 0             
+            
             logging.debug("material_id = {}".format(material_id))
             logging.debug("num_indices = {}".format(len(shape.mesh.indices)))
             n_indices = len(shape.mesh.indices)
@@ -508,7 +537,8 @@ class MeshRenderer(object):
                      softbody=False,
                      use_pbr=True,
                      use_pbr_mapping=True,
-                     shadow_caster=True):
+                     shadow_caster=True,
+                     parent_body=None):
         """
         Create instance for a visual object and link it to pybullet
 
@@ -522,6 +552,7 @@ class MeshRenderer(object):
         :param use_pbr: whether to use PBR
         :param use_pbr_mapping: whether to use PBR mapping
         :param shadow_caster: whether to cast shadow
+        :param parent_body: parent body name of current xml element (MuJoCo XML)
         """
         if self.optimization_process_executed and self.optimized:
             logging.error("Using optimized renderer and optimization process is already excuted, cannot add new "
@@ -541,7 +572,8 @@ class MeshRenderer(object):
                             softbody=softbody,
                             use_pbr=use_pbr,
                             use_pbr_mapping=use_pbr_mapping,
-                            shadow_caster=shadow_caster)
+                            shadow_caster=shadow_caster,
+                            parent_body=parent_body)
         self.instances.append(instance)
 
     def add_instance_group(self,
@@ -767,7 +799,6 @@ class MeshRenderer(object):
         :param render_shadow_pass: whether to render shadow
         :return: a list of float32 numpy arrays of shape (H, W, 4) corresponding to `modes`, where last channel is alpha
         """
-
         # run optimization process the first time render is called
         if self.optimized and not self.optimization_process_executed:
             self.optimize_vertex_and_texture()
@@ -783,7 +814,6 @@ class MeshRenderer(object):
 
         if self.enable_shadow and render_shadow_pass:
             # shadow pass
-
             if self.msaa:
                 self.r.render_meshrenderer_pre(1, self.fbo_ms, self.fbo)
             else:
@@ -1008,7 +1038,29 @@ class MeshRenderer(object):
         pose_cam = self.V.dot(pose_trans.T).dot(pose_rot).T
         return np.concatenate([mat2xyz(pose_cam), safemat2quat(pose_cam[:3, :3].T)])
 
-    def render_robot_cameras(self, modes=('rgb')):
+    def render_robosuite_cameras(self, modes=('rgb')):
+        """
+        Render robot camera images. This is applicable for robosuite integration with iGibson.
+
+        :return: a list of frames (number of modalities x number of robots)
+        """
+        frames = []
+        hide_robot = self.rendering_settings.hide_robot
+        for instance in self.instances:
+            if isinstance(instance, Robot):
+                for camera in instance.robot.cameras:
+                    if camera.is_active():
+                        camera_pose = camera.get_pose()
+                        camera_pos = camera_pose[:3]
+                        camera_ori = camera_pose[3:]
+                        camera_ori_mat = quat2rotmat([camera_ori[-1], camera_ori[0], camera_ori[1], camera_ori[2]])[:3, :3]
+                        camera_view_dir = camera_ori_mat.dot(np.array([0, 0, -1])) #Mujoco camera points in -z
+                        self.set_camera(camera_pos, camera_pos + camera_view_dir, [0, 0, 1])
+                        for item in self.render(modes=modes, hidden=[[],[instance]][hide_robot]):
+                            frames.append(item)
+        return frames
+
+    def render_robot_cameras(self, modes=('rgb')):        
         """
         Render robot camera images
 
@@ -1029,6 +1081,48 @@ class MeshRenderer(object):
                 for item in self.render(modes=modes, hidden=hidden_instances):
                     frames.append(item)
         return frames
+
+    def _get_names_active_cameras(self):
+        """
+        Query the list of active cameras. 
+        Applicable for integration with iGibson.
+
+        :return: a list of camera names
+        """
+        names = []
+        for instance in self.instances:
+            if isinstance(instance, Robot):
+                for camera in instance.robot.cameras:
+                    if camera.is_active():
+                        names.append(camera.camera_name)
+        return names
+
+    def _switch_camera(self, idx):
+        """
+        Switches the camera to particular index. 
+        Applicable for integration with iGibson.
+        """
+        for instance in self.instances:
+            if isinstance(instance, Robot):
+                instance.robot.cameras[idx].switch()
+
+    def _is_camera_active(self, idx):
+        """
+        Checks if camera at given index is active. 
+        Applicable for integration with iGibson.
+        """        
+        for instance in self.instances:
+            if isinstance(instance, Robot):
+                return instance.robot.cameras[idx].is_active()
+
+    def _get_camera_name(self, idx):
+        """
+        Checks if camera at given index is active. 
+        Applicable for integration with iGibson.
+        """   
+        for instance in self.instances:
+            if isinstance(instance, Robot):
+                return instance.robot.cameras[idx].camera_name    
 
     def optimize_vertex_and_texture(self):
         """

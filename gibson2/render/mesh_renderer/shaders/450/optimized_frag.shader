@@ -146,9 +146,9 @@ void main() {
         if (normal_tex_num == -1) {
             normal_map = 2 * texture(defaultNormalTexture, theCoords).rgb - 1;
         } else if (normal_tex_num == 0) {
-            normal_map = 2 * texture(bigTex, vec3(theCoords.x, theCoords.y, normal_tex_layer)).rgb - 1;
+            normal_map = 2 * texture(bigTex, vec3(fract(theCoords.x), fract(theCoords.y), normal_tex_layer)).rgb - 1;
         } else {
-            normal_map = 2 * texture(smallTex, vec3(theCoords.x, theCoords.y, normal_tex_layer)).rgb - 1;
+            normal_map = 2 * texture(smallTex, vec3(fract(theCoords.x), fract(theCoords.y), normal_tex_layer)).rgb - 1;
         }
         vec3 N = normalize(TBN * normal_map);
         vec3 Lo = normalize(eyePosition - FragPos);
@@ -159,9 +159,9 @@ void main() {
         if (tex_num == -1) {
             albedo = diffuse_colors[Draw_id].rgb;//diffuse color
         } else if (tex_num == 0) {
-            albedo = texture(bigTex, vec3(theCoords.x, theCoords.y, tex_layer)).rgb;
+            albedo = texture(bigTex, vec3(fract(theCoords.x), fract(theCoords.y), tex_layer)).rgb;
         } else if (tex_num == 1) {
-            albedo = texture(smallTex, vec3(theCoords.x, theCoords.y, tex_layer)).rgb;
+            albedo = texture(smallTex, vec3(fract(theCoords.x), fract(theCoords.y), tex_layer)).rgb;
         }
 
         int roughness_tex_num = int(tex_roughness_metallic_data[Draw_id].x);
@@ -170,9 +170,9 @@ void main() {
         if (roughness_tex_num == -1) {
             roughness_sampled = texture(defaultRoughnessTexture, theCoords).r;
         } else if (roughness_tex_num == 0) {
-            roughness_sampled =  texture(bigTex, vec3(theCoords.x, theCoords.y, roughness_tex_layer)).r;
+            roughness_sampled =  texture(bigTex, vec3(fract(theCoords.x), fract(theCoords.y), roughness_tex_layer)).r;
         } else {
-            roughness_sampled = texture(smallTex, vec3(theCoords.x, theCoords.y, roughness_tex_layer)).r;
+            roughness_sampled = texture(smallTex, vec3(fract(theCoords.x), fract(theCoords.y), roughness_tex_layer)).r;
         }
 
         int metallic_tex_num = int(tex_roughness_metallic_data[Draw_id].z);
@@ -181,9 +181,9 @@ void main() {
         if (metallic_tex_num == -1) {
             metallic_sampled = texture(defaultMetallicTexture, theCoords).r;
         } else if (metallic_tex_num == 0) {
-            metallic_sampled = texture(bigTex, vec3(theCoords.x, theCoords.y, metallic_tex_layer)).r;
+            metallic_sampled = texture(bigTex, vec3(fract(theCoords.x), fract(theCoords.y), metallic_tex_layer)).r;
         } else {
-            metallic_sampled = texture(smallTex, vec3(theCoords.x, theCoords.y, metallic_tex_layer)).r;
+            metallic_sampled = texture(smallTex, vec3(fract(theCoords.x), fract(theCoords.y), metallic_tex_layer)).r;
         }
 
         vec3 Fdielectric = vec3(0.04);
@@ -205,9 +205,9 @@ void main() {
         if (tex_num == -1) {
             outputColour = diffuse_colors[Draw_id] * diff; //diffuse color
         } else if (tex_num == 0) {
-            outputColour = texture(bigTex, vec3(theCoords.x, theCoords.y, tex_layer));
+            outputColour = texture(bigTex, vec3(fract(theCoords.x), fract(theCoords.y), tex_layer));
         } else if (tex_num == 1) {
-            outputColour = texture(smallTex, vec3(theCoords.x, theCoords.y, tex_layer));
+            outputColour = texture(smallTex, vec3(fract(theCoords.x), fract(theCoords.y), tex_layer));
         }
     }
     NormalColour =  vec4((Normal_cam + 1) / 2,1);

@@ -24,6 +24,7 @@ class MeshRendererSettings(object):
         glfw_gl_version=None,
         texture_scale=1.0,
         hide_robot=True,
+        is_robosuite=False
     ):
         """
         :param use_fisheye: whether to use fisheye camera
@@ -41,6 +42,7 @@ class MeshRendererSettings(object):
         :param glfw_gl_version: glfw gl version
         :param texture_scale: texture scale
         :param hide_robot: whether to hide robot when rendering
+        :param is_robosuite: whether the environment is of robosuite.
         """
         self.use_fisheye = use_fisheye
         self.msaa = msaa
@@ -56,6 +58,7 @@ class MeshRendererSettings(object):
         self.fullscreen = fullscreen
         self.texture_scale = texture_scale
         self.hide_robot = hide_robot
+        self.is_robosuite = is_robosuite
 
         if glfw_gl_version is not None:
             self.glfw_gl_version = glfw_gl_version
