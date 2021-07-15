@@ -1,0 +1,11 @@
+pull_request_rules:
+  - name: backport patches to stable branch
+    conditions:
+      - base=master
+      - label="doesn't break determinism"
+    actions:
+      backport:
+        branches:
+          - behavior-replay
+        assignees:
+          - "{{ author }}"
